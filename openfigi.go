@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"golang.org/x/exp/constraints"
-	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 const API_BASE_URL = "https://api.openfigi.com/v3"
@@ -85,19 +84,19 @@ func (BaseItem) GetBuilder() BaseItemBuilder {
 
 func (item *BaseItem) validate() error {
 	switch {
-	case !exchCodeVals.Has(item.ExchCode):
+	case !exchCodeSet.Has(item.ExchCode):
 		return fmt.Errorf("bad `exchCode`. See: %s", valuesUrl(item.ExchCode))
-	case !micCodeVals.Has(item.MicCode):
+	case !micCodeSet.Has(item.MicCode):
 		return fmt.Errorf("bad `micCode`. See: %s", valuesUrl(item.MicCode))
-	case !currencyVals.Has(item.Currency):
+	case !currencySet.Has(item.Currency):
 		return fmt.Errorf("bad `currency`. See: %s", valuesUrl(item.Currency))
-	case !marketSecDesVals.Has(item.MarketSecDes):
+	case !marketSecDesSet.Has(item.MarketSecDes):
 		return fmt.Errorf("bad `marketSecDes`. See: %s", valuesUrl(item.MarketSecDes))
-	case !securityTypeVals.Has(item.SecurityType):
+	case !securityTypeSet.Has(item.SecurityType):
 		return fmt.Errorf("bad `securityType`. See: %s", valuesUrl(item.SecurityType))
-	case !securityType2Vals.Has(item.SecurityType2):
+	case !securityType2Set.Has(item.SecurityType2):
 		return fmt.Errorf("bad `securityType2`. See: %s", valuesUrl(item.SecurityType2))
-	case !stateCodeVals.Has(item.StateCode):
+	case !stateCodeSet.Has(item.StateCode):
 		return fmt.Errorf("bad `stateCode`. See: %s", valuesUrl(item.StateCode))
 	}
 
@@ -166,7 +165,7 @@ func (item *MappingItem) validate() error {
 		return err
 	}
 
-	if !idTypeVals.Has(item.Type) {
+	if !idTypeSet.Has(item.Type) {
 		return fmt.Errorf("bad `idType`. See: %s", valuesUrl(item.Type))
 	}
 
@@ -271,7 +270,7 @@ type searchOrFilterRequest struct {
 }
 
 // Calls
-func (m_req MappingRequest) Fetch() (res SingleMappingResponse, err error) {
+func (m_req MappingRequest) Fetch() (res []SingleMappingResponse, err error) {
 	jsonData, err := json.Marshal(m_req)
 	if err != nil {
 		return
@@ -365,64 +364,5 @@ func valuesUrl(property string) string {
 	return API_BASE_URL + "/mapping/values/" + property
 }
 
-// ========================= INITIALIZATION =========================
-
-var (
-	idTypeVals,
-	exchCodeVals,
-	micCodeVals,
-	currencyVals,
-	marketSecDesVals,
-	securityTypeVals,
-	securityType2Vals,
-	stateCodeVals sets.Set[string]
-)
-
-func init() {
-	var wg sync.WaitGroup
-	props := map[string]*sets.Set[string]{
-		"idType":        &idTypeVals,
-		"exchCode":      &exchCodeVals,
-		"micCode":       &micCodeVals,
-		"currency":      &currencyVals,
-		"marketSecDes":  &marketSecDesVals,
-		"securityType":  &securityTypeVals,
-		"securityType2": &securityType2Vals,
-		"stateCode":     &stateCodeVals,
-	}
-
-	for k, v := range props {
-		wg.Add(1)
-		go func(k string, v *sets.Set[string]) {
-			defer wg.Done()
-			*v = sets.New(populateEnumerations(k)...)
-		}(k, v)
-	}
-	wg.Wait()
-	slog.Info("Enumerations populated")
-}
-
-func populateEnumerations(property string) []string {
-	url := valuesUrl(property)
-	slog.Debug(fmt.Sprintf("GET %s", url))
-
-	resp, err := http.Get(url)
-	if err != nil {
-		panic(fmt.Sprintf("Error making HTTP request: %v", err))
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		panic(fmt.Sprintf("HTTP request failed with status code %d", resp.StatusCode))
-	}
-
-	var result struct {
-		Values []string `json:"values"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		panic(fmt.Sprintf("Error decoding JSON response: %v", err))
-	}
-
-	return result.Values
-}
+// ========================= CODEGEN =========================
+//go:generate go run gen/gen.go
