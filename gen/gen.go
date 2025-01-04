@@ -165,7 +165,7 @@ func getValues(property string) []string {
 	slog.Info(fmt.Sprintf("GET %s", property))
 	resp, err := http.Get(url)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("Failed to get %s: %v. Make sure to not exceed rate limit", property, err))
 	}
 	defer resp.Body.Close()
 

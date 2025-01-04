@@ -174,6 +174,8 @@ func (interval interval[T]) validate() error {
 				return fmt.Errorf("bad interval: %v > %v", s, e)
 			}
 		}
+	default:
+		return fmt.Errorf("unsupported type: %T", zero)
 	}
 
 	return nil
