@@ -7,12 +7,50 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"sync"
 
 	"golang.org/x/exp/constraints"
 )
 
-const API_BASE_URL = "https://api.openfigi.com/v3"
+// ========================= PACKAGE CONFIG =========================
+type mutexStruct[T any] struct {
+	sync.RWMutex
+	value T
+}
+
+// 🔗 BaseURL
+var apiUrl mutexStruct[string]
+
+func SetAPIBaseUrl(url string) {
+	apiUrl.Lock()
+	defer apiUrl.Unlock()
+	apiUrl.value = url
+}
+
+func APIBaseUrl() string {
+	apiUrl.RLock()
+	defer apiUrl.RUnlock()
+	return apiUrl.value
+}
+
+// 🔒 AUTH
+// Could have used singleton, but maybe cycling API keys.
+var apiKey mutexStruct[string]
+
+func SetAPIKey(url string) {
+	apiKey.Lock()
+	defer apiKey.Unlock()
+	apiKey.value = url
+}
+
+func APIKey() string {
+	apiKey.RLock()
+	defer apiKey.RUnlock()
+	return apiKey.value
+}
+
+// ========================= TYPEs =========================
 
 type interval[T constraints.Ordered] [2]T
 
@@ -84,20 +122,20 @@ func (BaseItem) GetBuilder() BaseItemBuilder {
 
 func (item *BaseItem) validate() error {
 	switch {
-	case !exchCodeSet.Has(item.ExchCode):
-		return fmt.Errorf("bad `exchCode`. See: %s", valuesUrl(item.ExchCode))
-	case !micCodeSet.Has(item.MicCode):
-		return fmt.Errorf("bad `micCode`. See: %s", valuesUrl(item.MicCode))
-	case !currencySet.Has(item.Currency):
-		return fmt.Errorf("bad `currency`. See: %s", valuesUrl(item.Currency))
-	case !marketSecDesSet.Has(item.MarketSecDes):
-		return fmt.Errorf("bad `marketSecDes`. See: %s", valuesUrl(item.MarketSecDes))
-	case !securityTypeSet.Has(item.SecurityType):
-		return fmt.Errorf("bad `securityType`. See: %s", valuesUrl(item.SecurityType))
-	case !securityType2Set.Has(item.SecurityType2):
-		return fmt.Errorf("bad `securityType2`. See: %s", valuesUrl(item.SecurityType2))
-	case !stateCodeSet.Has(item.StateCode):
-		return fmt.Errorf("bad `stateCode`. See: %s", valuesUrl(item.StateCode))
+	case item.ExchCode != "" && !exchCodeSet.Has(item.ExchCode):
+		return fmt.Errorf("bad `exchCode`. See: %s", valuesUrl("exchCode"))
+	case item.MicCode != "" && !micCodeSet.Has(item.MicCode):
+		return fmt.Errorf("bad `micCode`. See: %s", valuesUrl("micCode"))
+	case item.Currency != "" && !currencySet.Has(item.Currency):
+		return fmt.Errorf("bad `currency`. See: %s", valuesUrl("currency"))
+	case item.MarketSecDes != "" && !marketSecDesSet.Has(item.MarketSecDes):
+		return fmt.Errorf("bad `marketSecDes`. See: %s", valuesUrl("marketSecDes"))
+	case item.SecurityType != "" && !securityTypeSet.Has(item.SecurityType):
+		return fmt.Errorf("bad `securityType`. See: %s", valuesUrl("securityType"))
+	case item.SecurityType2 != "" && !securityType2Set.Has(item.SecurityType2):
+		return fmt.Errorf("bad `securityType2`. See: %s", valuesUrl("securityType2"))
+	case item.StateCode != "" && !stateCodeSet.Has(item.StateCode):
+		return fmt.Errorf("bad `stateCode`. See: %s", valuesUrl("stateCode"))
 	}
 
 	// exchCode and micCode cannot coexist
@@ -107,18 +145,21 @@ func (item *BaseItem) validate() error {
 
 	// Validate intervals
 	for _, interval := range []validator{item.Strike, item.ContractSize, item.Coupon, item.Expiration, item.Maturity} {
-		if err := interval.validate(); err != nil {
-			return err
+		// This is weird, somehow checking nil of interface have some quirks
+		if reflect.ValueOf(interval).Kind() == reflect.Ptr && !reflect.ValueOf(interval).IsNil() {
+			if err := interval.validate(); err != nil {
+				return err
+			}
 		}
 	}
 
 	// Only option has expiration
-	if item.SecurityType2 == "Option" && *item.Expiration != [2]string{"", ""} {
+	if !(item.SecurityType2 == "Option") && item.Expiration != nil {
 		return fmt.Errorf("`expiration` is only valid for `Option`")
 	}
 
 	// Only pool has maturity
-	if item.SecurityType2 == "Pool" && *item.Maturity != [2]string{"", ""} {
+	if !(item.SecurityType2 == "Pool") && item.Maturity != nil {
 		return fmt.Errorf("`maturity` is only valid for `Pool`")
 	}
 
@@ -199,69 +240,40 @@ func (req *MappingRequest) FromMappingItemBuilders(builders ...MappingItemBuilde
 // ========================= RESPONSES =========================
 
 type FIGIObject struct {
-	FIGI                string `json:"figi"`
-	SecurityType        string `json:"securityType"`
-	MarketSector        string `json:"marketSector"`
-	Ticker              string `json:"ticker"`
-	Name                string `json:"name"`
-	UniqueID            string `json:"uniqueID"`
-	ExchangeCode        string `json:"exchCode"`
-	ShareClassFIGI      string `json:"shareClassFIGI"`
-	CompositeFIGI       string `json:"compositeFIGI"`
-	SecurityType2       string `json:"securityType2"`
-	SecurityDescription string `json:"securityDescription"`
-	Metadata            string `json:"metadata"` // Exists when API is unable to show non-FIGI fields
+	FIGI                string `json:"figi,omitempty"`
+	SecurityType        string `json:"securityType,omitempty"`
+	MarketSector        string `json:"marketSector,omitempty"`
+	Ticker              string `json:"ticker,omitempty"`
+	Name                string `json:"name,omitempty"`
+	UniqueID            string `json:"uniqueID,omitempty"`
+	ExchangeCode        string `json:"exchCode,omitempty"`
+	ShareClassFIGI      string `json:"shareClassFIGI,omitempty"`
+	CompositeFIGI       string `json:"compositeFIGI,omitempty"`
+	SecurityType2       string `json:"securityType2,omitempty"`
+	SecurityDescription string `json:"securityDescription,omitempty"`
+	Metadata            string `json:"metadata,omitempty"` // Exists when API is unable to show non-FIGI fields
 }
 
 type SingleMappingResponse struct {
 	Data    []FIGIObject `json:"data"`
-	Error   string       `json:"error"`
-	Warning []string     `json:"warning"`
+	Error   string       `json:"error,omitempty"`
+	Warning []string     `json:"warning,omitempty"`
 }
 
 type SearchResponse struct {
 	Data     []FIGIObject `json:"data"`
-	Error    string       `json:"error"`
-	NextHash string       `json:"next"`
+	Error    string       `json:"error,omitempty"`
+	NextHash string       `json:"next,omitempty"`
 	baseitem BaseItem
 	query    string
 }
 
 type FilterResponse struct {
-	Data     []FIGIObject `json:"data"`
-	Error    string       `json:"error"`
-	NextHash string       `json:"next"`
-	Total    int          `json:"total"`
-	baseitem BaseItem
-	query    string
+	SearchResponse
+	Total int `json:"total"`
 }
 
 // ========================= API =========================
-
-// 🔒 AUTH
-// Could have used singleton, but maybe cycling API keys.
-type apiKeyManager struct {
-	key string
-	mu  sync.RWMutex
-}
-
-var apiKey apiKeyManager
-
-func NewAPIKeyManager(key string) {
-	apiKey = apiKeyManager{key: key}
-}
-
-func GetKey() string {
-	apiKey.mu.RLock()
-	defer apiKey.mu.RUnlock()
-	return apiKey.key
-}
-
-func SetKey(key string) {
-	apiKey.mu.Lock()
-	defer apiKey.mu.Unlock()
-	apiKey.key = key
-}
 
 type searchOrFilterRequest struct {
 	BaseItem
@@ -275,12 +287,12 @@ func (m_req MappingRequest) Fetch() (res []SingleMappingResponse, err error) {
 	if err != nil {
 		return
 	}
-	req, _ := http.NewRequest("POST", API_BASE_URL+"/mapping", bytes.NewBuffer(jsonData))
+	req, _ := http.NewRequest("POST", APIBaseUrl()+"/mapping", bytes.NewBuffer(jsonData))
 	req.Header.Set("Content-Type", "application/json")
-	if key := GetKey(); key != "" {
+	if key := APIKey(); key != "" {
 		req.Header.Set("X-OPENFIGI-APIKEY", key)
 	}
-	slog.Debug(fmt.Sprintf("POST %s", API_BASE_URL+"/mapping"))
+	slog.Debug(fmt.Sprintf("POST %s", APIBaseUrl()+"/mapping"))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -306,12 +318,12 @@ func postBaseItem[T any](endpoint string, item BaseItem, query string, start str
 	if err != nil {
 		return
 	}
-	req, _ := http.NewRequest("POST", API_BASE_URL+endpoint, bytes.NewBuffer(jsonData))
+	req, _ := http.NewRequest("POST", APIBaseUrl()+endpoint, bytes.NewBuffer(jsonData))
 	req.Header.Set("Content-Type", "application/json")
-	if key := GetKey(); key != "" {
+	if key := APIKey(); key != "" {
 		req.Header.Set("X-OPENFIGI-APIKEY", key)
 	}
-	slog.Debug(fmt.Sprintf("POST %s", API_BASE_URL+endpoint))
+	slog.Debug(fmt.Sprintf("POST %s", APIBaseUrl()+endpoint))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -361,7 +373,11 @@ func (filterRes FilterResponse) Next() (FilterResponse, error) {
 // ========================= AUXILIARY FUNC =========================
 
 func valuesUrl(property string) string {
-	return API_BASE_URL + "/mapping/values/" + property
+	return APIBaseUrl() + "/mapping/values/" + property
+}
+
+func init() {
+	SetAPIBaseUrl("https://api.openfigi.com/v3")
 }
 
 // ========================= CODEGEN =========================
