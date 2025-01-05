@@ -1,4 +1,4 @@
-// Package openfigi: This package provides a client for the [OpenFIGI API].
+// openfigi: a client for the [OpenFIGI API].
 //
 // 3 types of queries:
 //   - Search
