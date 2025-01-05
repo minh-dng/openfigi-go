@@ -20,7 +20,7 @@ A client for the [OpenFIGI API].
 
 3. Build the item (`.Build()`). The package will validate the content of the item, reducing bad API calls.
 
-4. [optional] API Key, set with `.SetAPIKey(string)`.
+4. [optional] API Key, set with `SetAPIKey(string)`.
 
 5. Use the client to make the request.
 
