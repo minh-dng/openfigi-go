@@ -35,7 +35,6 @@ func APIBaseUrl() string {
 }
 
 // 🔒 AUTH
-// Could have used singleton, but maybe cycling API keys.
 var apiKey mutexStruct[string]
 
 func SetAPIKey(url string) {
@@ -166,6 +165,7 @@ func (item *BaseItem) validate() error {
 	return nil
 }
 
+// Convert to MappingItem, requires `idType` and `value`
 func (b_item *BaseItem) AsMappingItem(idType string, value any) (item MappingItem, err error) {
 	item = MappingItem{
 		BaseItem: *b_item,
@@ -218,6 +218,7 @@ func (item *MappingItem) validate() error {
 	return nil
 }
 
+// Convert to BaseItem
 func (m_item *MappingItem) AsBaseItem() (item BaseItem, err error) {
 	item = m_item.BaseItem
 	err = item.validate()
@@ -226,6 +227,15 @@ func (m_item *MappingItem) AsBaseItem() (item BaseItem, err error) {
 
 type MappingRequest []MappingItem
 
+// Helper to create a MappingRequest from MappingItemBuilders
+//
+// Usage:
+//
+//	req := MappingRequest{}
+//	req.FromMappingItemBuilders(
+//		MappingItem{}.GetBuilder(constants.IDTYPE_TICKER, "AAPL"),
+//		MappingItem{}.GetBuilder("ID_BB_UNIQUE", "EQ0010080100001000"),
+//	)
 func (req *MappingRequest) FromMappingItemBuilders(builders ...MappingItemBuilder) error {
 	for _, builder := range builders {
 		item, err := builder.Build()
@@ -239,6 +249,7 @@ func (req *MappingRequest) FromMappingItemBuilders(builders ...MappingItemBuilde
 
 // ========================= RESPONSES =========================
 
+// FIGI Object returned by the API
 type FIGIObject struct {
 	FIGI                string `json:"figi,omitempty"`
 	SecurityType        string `json:"securityType,omitempty"`
@@ -264,8 +275,8 @@ type SearchResponse struct {
 	Data     []FIGIObject `json:"data"`
 	Error    string       `json:"error,omitempty"`
 	NextHash string       `json:"next,omitempty"`
-	baseitem BaseItem
-	query    string
+	baseitem BaseItem     // For Next() calls
+	query    string       // For Next() calls
 }
 
 type FilterResponse struct {
@@ -281,7 +292,21 @@ type searchOrFilterRequest struct {
 	Start string `json:"start,omitempty"`
 }
 
-// Calls
+// === Calls
+
+// Fetch the mappings
+//
+// Usage:
+//
+//	// Setters does not chain directly to the builder
+//	aapl_builder := MappingItem{}.GetBuilder(constants.IDTYPE_TICKER, "AAPL")
+//	aapl_builder.SetExchCode("US")
+//
+//	req := MappingRequest{
+//		aapl_builder.Build(),
+//		MappingItem{}.GetBuilder("ID_BB_UNIQUE", "EQ0010080100001000").Build(),
+//	}
+//	res, err := req.Fetch()
 func (m_req MappingRequest) Fetch() (res []SingleMappingResponse, err error) {
 	jsonData, err := json.Marshal(m_req)
 	if err != nil {
@@ -309,6 +334,7 @@ func (m_req MappingRequest) Fetch() (res []SingleMappingResponse, err error) {
 	return
 }
 
+// Search and Filter common code
 func postBaseItem[T any](endpoint string, item BaseItem, query string, start string) (res T, err error) {
 	jsonData, err := json.Marshal(searchOrFilterRequest{
 		BaseItem: item,
@@ -340,6 +366,14 @@ func postBaseItem[T any](endpoint string, item BaseItem, query string, start str
 	return
 }
 
+// Search with BaseItem, query and start
+//
+// Usage:
+//
+//	builder := BaseItem{}.GetBuilder()
+//	builder.SetCurrency("AUD")
+//	item, _ := builder.Build()
+//	res, err := item.Search("", "")
 func (item BaseItem) Search(query string, start string) (res SearchResponse, err error) {
 	res, err = postBaseItem[SearchResponse]("/search", item, query, start)
 	res.baseitem = item
@@ -348,6 +382,21 @@ func (item BaseItem) Search(query string, start string) (res SearchResponse, err
 	return
 }
 
+// Continue searching with previous SearchResponse
+// using the "next" field of API response.
+// Returns an error if there are no more results or search error
+//
+// Usage:
+//
+//	res, err := item.Search("CRYP", "")
+//	if err != nil {
+//		fmt.Println("Error searching:", err)
+//	}
+//	fmt.Printf("\n%+v\n", res.Data)
+//	next, err := res.Next()
+//	if err != nil {
+//		fmt.Println("Search pause due to:", err)
+//	}
 func (searchRes SearchResponse) Next() (SearchResponse, error) {
 	if searchRes.NextHash == "" {
 		return SearchResponse{}, fmt.Errorf("no more results")
@@ -355,6 +404,14 @@ func (searchRes SearchResponse) Next() (SearchResponse, error) {
 	return searchRes.baseitem.Search(searchRes.query, searchRes.NextHash)
 }
 
+// Filter with BaseItem, query and start
+//
+// Usage:
+//
+//	builder := BaseItem{}.GetBuilder()
+//	builder.SetCurrency("AUD")
+//	item, _ := builder.Build()
+//	res, err := item.Filter("CRYP", "QW9Fc1FrSkhNREF3TTBoYVdEVXkgMQ==.+avM2j1t25UWj8se/VnwSBhcM8LYMVpYykjqLj8hw70=")
 func (item BaseItem) Filter(query string, start string) (res FilterResponse, err error) {
 	res, err = postBaseItem[FilterResponse]("/filter", item, query, start)
 	res.baseitem = item
@@ -363,6 +420,21 @@ func (item BaseItem) Filter(query string, start string) (res FilterResponse, err
 	return
 }
 
+// Continue filtering with previous FilterResponse
+// using the "next" field of API response.
+// Returns an error if there are no more results or filter error
+//
+// Usage:
+//
+//	res, err := item.Filter("CRYP", "")
+//	if err != nil {
+//		fmt.Println("Error filtering:", err)
+//	}
+//	fmt.Printf("\n%+v\n", res.Data)
+//	next, err := res.Next()
+//	if err != nil {
+//		fmt.Println("Filter pause due to:", err)
+//	}
 func (filterRes FilterResponse) Next() (FilterResponse, error) {
 	if filterRes.NextHash == "" {
 		return FilterResponse{}, fmt.Errorf("no more results")
@@ -372,10 +444,14 @@ func (filterRes FilterResponse) Next() (FilterResponse, error) {
 
 // ========================= AUXILIARY FUNC =========================
 
+// Possible values of a property from the API
 func valuesUrl(property string) string {
 	return APIBaseUrl() + "/mapping/values/" + property
 }
 
+// ========================= INIT =========================
+
+// Set the default API base URL
 func init() {
 	SetAPIBaseUrl("https://api.openfigi.com/v3")
 }

@@ -9,6 +9,7 @@ import (
 )
 
 // ========================= BASE ITEM =========================
+
 type BaseItemBuilder struct {
 	item BaseItem
 }
@@ -55,7 +56,7 @@ func (b *BaseItemBuilder) SetOptionType(optionType string) *BaseItemBuilder {
 
 // Usage:
 //
-//	builder.SetStrike([2]any{nil, 2})
+//	builder.SetStrike([2]any{nil, 2.0})
 func (b *BaseItemBuilder) SetStrike(strike [2]any) *BaseItemBuilder {
 	strikeRange := intepretRange[float64](strike)
 	b.item.Strike = &strikeRange
@@ -64,7 +65,7 @@ func (b *BaseItemBuilder) SetStrike(strike [2]any) *BaseItemBuilder {
 
 // Usage:
 //
-//	builder.SetContractSize([2]any{2, nil})
+//	builder.SetContractSize([2]any{2.0, nil})
 func (b *BaseItemBuilder) SetContractSize(contractSize [2]any) *BaseItemBuilder {
 	contractSizeRange := intepretRange[float64](contractSize)
 	b.item.ContractSize = &contractSizeRange
@@ -73,7 +74,7 @@ func (b *BaseItemBuilder) SetContractSize(contractSize [2]any) *BaseItemBuilder 
 
 // Usage:
 //
-//	builder.SetCoupon([2]any{nil, 2})
+//	builder.SetCoupon([2]any{nil, 2.0})
 func (b *BaseItemBuilder) SetCoupon(coupon [2]any) *BaseItemBuilder {
 	couponRange := intepretRange[float64](coupon)
 	b.item.Coupon = &couponRange
@@ -126,6 +127,9 @@ func (m *MappingItemBuilder) Build() (item MappingItem, err error) {
 
 // ========================= AUXILIARY FUNC =========================
 
+// Make sure the range is of the right type. Will panic if not.
+// If float, nil will be replaced with -Inf or Inf.
+// If string, nil will be replaced with "".
 func intepretRange[T constraints.Ordered](interval [2]interface{}) interval[T] {
 	var zero T
 	switch any(zero).(type) {
@@ -147,6 +151,7 @@ func intepretRange[T constraints.Ordered](interval [2]interface{}) interval[T] {
 	return [2]T{interval[0].(T), interval[1].(T)}
 }
 
+// Validate the interval. The bound must be in the right order, no both nils.
 func (interval interval[T]) validate() error {
 	var zero T
 	switch any(zero).(type) {
