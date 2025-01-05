@@ -13,8 +13,7 @@ A client for the [OpenFIGI API].
 1. Construct a builder.
 
    - Search and Filter use `BaseItemBuilder`, then construct a `BaseItem`.
-   - Mapping uses `MappingItemBuilder`, then construct a `MappingItem`,
-     a slice of `MappingItem` or a `MappingRequest`.
+   - Mapping uses `MappingItemBuilder`, then construct a `MappingItem`. `MappingRequest` is `[]MappingItem`.
 
 2. Set the properties through setters. (`.Set[...](...)`)
 
@@ -26,7 +25,7 @@ A client for the [OpenFIGI API].
 
    - `BaseItem` use `.[Search|Filter](query string, start string)`
      returning `SearchResponse` or `FilterResponse`
-   - `MappingRequest` use `.Fetch()` returning a slice of `SingleMappingResponse`
+   - `MappingRequest` use `.Fetch()` returning `[]SingleMappingResponse`
    - `SearchResponse` and `FilterResponse` have a `.Next()` method to fetch the next page.
   
 ## Developing

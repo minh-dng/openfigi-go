@@ -11,8 +11,8 @@
 //
 //     - Search and Filter use [BaseItemBuilder], then construct a [BaseItem].
 //
-//     - Mapping uses [MappingItemBuilder], then construct a [MappingItem],
-//     a slice of [MappingItem] or a [MappingRequest].
+//     - Mapping uses [MappingItemBuilder], then construct a [MappingItem].
+//     [MappingRequest] is [][MappingItem].
 //
 //  2. Set the properties through setters. (".Set[...](...)")
 //
@@ -25,7 +25,7 @@
 //
 //     - [BaseItem.Search], [BaseItem.Filter], returning [SearchResponse] or [FilterResponse]
 //
-//     - [MappingRequest] use [MappingRequest.Fetch] returning [][SingleMappingResponse]
+//     - [MappingRequest.Fetch] returning [][SingleMappingResponse]
 //
 //     - [SearchResponse.Next], [FilterResponse.Next] to fetch the next page.
 //
